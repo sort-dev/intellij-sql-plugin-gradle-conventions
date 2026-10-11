@@ -28,7 +28,6 @@ import org.jetbrains.intellij.platform.gradle.tasks.BuildPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel
-import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 
@@ -121,7 +120,6 @@ class SqlDialectPlugin : Plugin<Project> {
         extensions.configure<KotlinJvmProjectExtension> {
             compilerOptions {
                 jvmTarget.set(JvmTarget.JVM_21)
-                jvmDefault.set(JvmDefaultMode.NO_COMPATIBILITY)
             }
         }
 
@@ -147,6 +145,7 @@ class SqlDialectPlugin : Plugin<Project> {
                 )
                 ides {
                     create(provider { version("intellij-verifier-ides").split(' ') })
+                    create(extension.additionalVerifierIdes)
                 }
             }
             publishing {
@@ -181,13 +180,13 @@ class SqlDialectPlugin : Plugin<Project> {
             if (pluginIsolation) {
                 include(ISOLATION_TESTS)
                 classpath = (classpath - productFiles).filter { entry ->
-                    siblingPaths.none { it in entry.path } && !entry.name.startsWith(productJarPrefix) && sandboxLibraries !in entry.path
+                    siblingPaths.none { it in entry.path } && sandboxLibraries !in entry.path &&
+                        !entry.name.startsWith(productJarPrefix) && !entry.name.startsWith("brikk-")
                 }
                 jvmArgumentProviders.add(CommandLineArgumentProvider {
                     listOf("-Didea.force.use.core.classloader=true", "-Didea.use.core.classloader.for.plugin.path=false")
                 })
             } else {
-                include("**/*Test.class")
                 exclude(ISOLATION_TESTS)
                 classpath = classpath.filter { entry ->
                     siblingPaths.none { it in entry.path } || !(entry.name.startsWith("brikk-") || entry.name.startsWith("kotlin-stdlib"))

@@ -10,6 +10,7 @@ abstract class SqlDialectPluginExtension {
     abstract val additionalBundledPlugins: ListProperty<String>
     abstract val excludePlatformKotlin: Property<Boolean>
     abstract val kotlinTests: Property<Boolean>
+    abstract val additionalVerifierIdes: ListProperty<String>
     abstract val legalFiles: ListProperty<String>
     abstract val embeddedLibraries: SetProperty<String>
     abstract val bytecodeCeilings: MapProperty<String, Int>
