@@ -55,6 +55,7 @@ class SqlDialectPlugin : Plugin<Project> {
             pluginId.convention("dev.sort.$name")
             excludePlatformKotlin.convention(true)
             kotlinTests.convention(true)
+            legalFiles.convention(listOf("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"))
         }
 
         val platformPlugins = extension.additionalBundledPlugins.map { listOf("com.intellij.database", JSON) + kotlinHosts + it }
@@ -208,7 +209,7 @@ class SqlDialectPlugin : Plugin<Project> {
             sandboxSuffix.set("-test-" + installedSiblings.sorted().joinToString("-"))
         }
 
-        val licenseFiles = files("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md")
+        val licenseFiles = files(extension.legalFiles)
         tasks.named<ProcessResources>("processResources") {
             from(licenseFiles) { into("META-INF") }
         }

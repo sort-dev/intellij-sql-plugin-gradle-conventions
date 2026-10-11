@@ -56,7 +56,7 @@ The plugin applies Kotlin JVM and the IntelliJ Platform Gradle plugin, compiles 
 | --- | --- | --- |
 | `pluginId` | `dev.sort.<project name>` | Plugin loaded by the test fixture |
 | `bundledPlugins` | database, JSON, Java, Kotlin, Git | Bundled plugins for compilation and tests |
-| `embeddedLibraries` | none | Jar names, without versions, expected in `lib/` beside the plugin jar |
+| `embeddedLibraries` | none | Jars expected in `lib/` beside the plugin jar: an exact file name, or a name without version |
 | `bytecodeCeilings` | none | Class file version allowed per library, instead of 65 (Java 21) |
 | `requiredNotices` | none | Text that `THIRD_PARTY_NOTICES.md` must contain |
 | `internalApiPackages` | none | Packages whose use is confined to `internalApiAllowedIn` |
