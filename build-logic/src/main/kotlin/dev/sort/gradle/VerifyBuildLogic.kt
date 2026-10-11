@@ -22,7 +22,9 @@ abstract class VerifyBuildLogic : DefaultTask() {
     @TaskAction
     fun verify() {
         val root = directory.get().asFile
-        val origin = root.resolve(ORIGIN).readLines().filter { it.isNotBlank() }.associate { it.substringBefore(' ') to it.substringAfter(' ') }
+        val record = root.resolve(ORIGIN)
+        check(record.isFile) { "Missing build-logic/$ORIGIN; vendor build-logic with sync-into.sh" }
+        val origin = record.readLines().filter { it.isNotBlank() }.associate { it.substringBefore(' ') to it.substringAfter(' ') }
         val tree = treeId(root)?.let { HexFormat.of().formatHex(it) }
         check(tree == origin["tree"]) {
             "build-logic differs from ${origin["repository"]} at ${origin["commit"]}: tree $tree, expected ${origin["tree"]}. " +
