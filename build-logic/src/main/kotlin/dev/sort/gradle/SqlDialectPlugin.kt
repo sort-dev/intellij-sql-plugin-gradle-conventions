@@ -52,14 +52,21 @@ class SqlDialectPlugin : Plugin<Project> {
         val extension = extensions.create<SqlDialectPluginExtension>("sqlDialectPlugin").apply {
             pluginId.convention("dev.sort.$name")
             excludePlatformKotlin.convention(true)
+            kotlinTests.convention(true)
             bundledPlugins.convention(listOf("com.intellij.database", "com.intellij.modules.json", "Git4Idea") + kotlinHosts)
         }
 
-        val kotlinMode = providers.gradleProperty("test.kotlin").getOrElse("present")
-        require(kotlinMode in setOf("present", "absent")) { "test.kotlin must be present or absent" }
+        val kotlinMode = providers.gradleProperty("test.kotlin").orNull
+        require(kotlinMode in setOf(null, "present", "absent")) { "test.kotlin must be present or absent" }
         val sqlTranspilerMode = providers.gradleProperty("test.sqlTranspiler").orNull
         require(sqlTranspilerMode in setOf(null, "installed", "absent")) { "test.sqlTranspiler must be installed or absent" }
         val pluginIsolation = providers.gradleProperty("test.pluginIsolation").orNull == "true"
+        require(!pluginIsolation || kotlinMode != "present") { "Run plugin isolation and Kotlin host tests in separate builds" }
+        val kotlinTests = when {
+            pluginIsolation -> provider { false }
+            kotlinMode != null -> provider { kotlinMode == "present" }
+            else -> extension.kotlinTests
+        }
         val siblingZips = (siblings - "sql-transpiler").mapNotNull { sibling ->
             providers.gradleProperty("test.${sibling}PluginZip").orNull?.let { sibling to file(it) }
         }.toMap()
@@ -135,9 +142,8 @@ class SqlDialectPlugin : Plugin<Project> {
             }
         }
 
-        val testPluginIds = extension.bundledPlugins.zip(extension.pluginId) { bundled, id ->
-            (bundled.filter { kotlinMode == "present" || it !in kotlinHosts } + id + installedSiblings.map { "dev.sort.$it-intellij-plugin" })
-                .joinToString(",")
+        val testPluginIds = extension.bundledPlugins.zip(extension.pluginId) { bundled, id -> bundled + id }.zip(kotlinTests) { ids, kotlin ->
+            (ids.filter { kotlin || it !in kotlinHosts } + installedSiblings.map { "dev.sort.$it-intellij-plugin" }).joinToString(",")
         }
         val siblingPaths = siblings.map { "/$it-intellij-plugin/" }
         val sourceSets = extensions.getByType<SourceSetContainer>()
@@ -152,12 +158,12 @@ class SqlDialectPlugin : Plugin<Project> {
         fun Test.configureSuite() {
             useJUnit()
             systemProperty("java.awt.headless", "true")
-            systemProperty("test.kotlin", kotlinMode)
+            systemProperty("test.kotlin", if (kotlinTests.get()) "present" else "absent")
             systemProperty("test.pluginIsolation", pluginIsolation.toString())
             systemProperty("test.siblingPlugins", siblingZips.keys.joinToString(","))
             sqlTranspilerMode?.let { systemProperty("test.sqlTranspiler", it) }
             jvmArgumentProviders.add(CommandLineArgumentProvider { listOf("-Didea.load.plugins.id=${testPluginIds.get()}") })
-            if (kotlinMode == "absent") exclude("**/brikk/**")
+            if (!kotlinTests.get()) exclude("**/brikk/**")
             if (pluginIsolation) {
                 include(ISOLATION_TESTS)
                 classpath = (classpath - productFiles).filter { entry ->
