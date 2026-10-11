@@ -31,9 +31,6 @@ abstract class VerifyDistribution : DefaultTask() {
     abstract val pluginJar: Property<String>
 
     @get:Input
-    abstract val pluginVersion: Property<String>
-
-    @get:Input
     abstract val embeddedLibraries: SetProperty<String>
 
     @get:Input
@@ -60,10 +57,6 @@ abstract class VerifyDistribution : DefaultTask() {
 
     @TaskAction
     fun verify() {
-        if (!pluginVersion.get().endsWith("-SNAPSHOT")) {
-            val snapshots = embeddedComponents.get().filter { it.endsWith("-SNAPSHOT") }
-            check(snapshots.isEmpty()) { "Release ${pluginVersion.get()} embeds snapshot libraries: $snapshots" }
-        }
         ZipFile(distribution.get().asFile).use { zip ->
             val jars = zip.entries().asSequence().filter { it.name.endsWith(".jar") }.associateBy { it.name.substringAfterLast('/') }
             val ownJar = jars[pluginJar.get()] ?: error("Missing ${pluginJar.get()}")

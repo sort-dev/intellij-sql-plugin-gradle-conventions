@@ -217,18 +217,16 @@ class SqlDialectPlugin : Plugin<Project> {
         tasks.named<Test>("test") { configureSuite() }
 
         val buildPlugin = tasks.named<BuildPluginTask>("buildPlugin") { archiveVersion.set("") }
+        val embedded = configurations.named("runtimeClasspath").flatMap { it.incoming.artifacts.resolvedArtifacts }.map { artifacts ->
+            artifacts.mapNotNull { (it.id.componentIdentifier as? ModuleComponentIdentifier)?.displayName }
+        }
         val verifyDistribution = tasks.register<VerifyDistribution>("verifyDistribution") {
             group = "verification"
             description = "Checks the embedded libraries, bytecode levels, notices and descriptor of the plugin ZIP."
             distribution.set(buildPlugin.flatMap { it.archiveFile })
             pluginJar.set(tasks.named<Jar>("composedJar").flatMap { it.archiveFileName })
-            pluginVersion.set(provider { project.version.toString() })
             embeddedLibraries.set(extension.embeddedLibraries)
-            embeddedComponents.set(
-                configurations.named("runtimeClasspath").flatMap { it.incoming.artifacts.resolvedArtifacts }.map { artifacts ->
-                    artifacts.mapNotNull { (it.id.componentIdentifier as? ModuleComponentIdentifier)?.displayName }
-                },
-            )
+            embeddedComponents.set(embedded)
             bytecodeCeilings.set(extension.bytecodeCeilings)
             legalFiles.from(licenseFiles)
             requiredNotices.set(extension.requiredNotices)
@@ -242,6 +240,13 @@ class SqlDialectPlugin : Plugin<Project> {
             directory.set(layout.projectDirectory.dir("build-logic"))
         }
         tasks.named("check") { dependsOn(verifyDistribution, verifyBuildLogic) }
+        val verifyRelease = tasks.register<VerifyRelease>("verifyRelease") {
+            group = "verification"
+            description = "Refuses snapshot libraries in a release version."
+            pluginVersion.set(provider { project.version.toString() })
+            embeddedComponents.set(embedded)
+        }
+        tasks.named("publishPlugin") { dependsOn(verifyDistribution, verifyRelease) }
 
         val ideaVersion = extensions.getByType<IntelliJPlatformExtension>().pluginConfiguration.ideaVersion
         tasks.register<DogfoodZip>("dogfoodZip") {
