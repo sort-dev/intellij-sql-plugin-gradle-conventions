@@ -70,13 +70,19 @@ class SqlDialectPlugin : Plugin<Project> {
             kotlinMode != null -> provider { kotlinMode == "present" }
             else -> extension.kotlinTests
         }
-        val siblingZips = (siblings - "sql-transpiler").mapNotNull { sibling ->
-            providers.gradleProperty("test.${sibling}PluginZip").orNull?.let { sibling to file(it) }
+        val siblingZips = siblings.mapNotNull { sibling ->
+            val property = "test.${if (sibling == "sql-transpiler") "sqlTranspiler" else sibling}PluginZip"
+            providers.gradleProperty(property).orNull?.let { sibling to file(it) }
         }.toMap()
         siblingZips.forEach { (sibling, zip) -> require(zip.isFile) { "Missing $sibling plugin ZIP: $zip" } }
+        require(sqlTranspilerMode == null || "sql-transpiler" !in siblingZips) {
+            "Use either -Ptest.sqlTranspilerPluginZip or -Ptest.sqlTranspiler, not both"
+        }
         val sqlTranspilerPlugin = "dev.sort.sql-transpiler-intellij-plugin:${version("sql-transpiler-plugin")}"
             .takeIf { sqlTranspilerMode == "installed" && "sql-transpiler" in siblings }
         val installedSiblings = siblingZips.keys + listOfNotNull("sql-transpiler".takeIf { sqlTranspilerPlugin != null })
+        val dialectZips = siblingZips.keys - "sql-transpiler"
+        val sqlTranspilerProperty = if ("sql-transpiler" in siblingZips) "installed" else sqlTranspilerMode
 
         repositories.exclusiveContent {
             forRepositories(repositories.mavenLocal())
@@ -166,8 +172,8 @@ class SqlDialectPlugin : Plugin<Project> {
             systemProperty("java.awt.headless", "true")
             systemProperty("test.kotlin", if (kotlinTests.get()) "present" else "absent")
             systemProperty("test.pluginIsolation", pluginIsolation.toString())
-            systemProperty("test.siblingPlugins", siblingZips.keys.joinToString(","))
-            sqlTranspilerMode?.let { systemProperty("test.sqlTranspiler", it) }
+            systemProperty("test.siblingPlugins", dialectZips.joinToString(","))
+            sqlTranspilerProperty?.let { systemProperty("test.sqlTranspiler", it) }
             jvmArgumentProviders.add(CommandLineArgumentProvider {
                 listOf("-Didea.load.plugins.id=" + (testPluginIds.get() + extraPluginIds).distinct().joinToString(","))
             })
