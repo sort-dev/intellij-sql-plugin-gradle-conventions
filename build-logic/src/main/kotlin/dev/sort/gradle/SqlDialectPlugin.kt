@@ -6,6 +6,7 @@ import org.gradle.api.Project
 import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.plugins.ExtensionAware
 import org.gradle.api.plugins.JavaPluginExtension
+import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.testing.Test
 import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.create
@@ -15,11 +16,14 @@ import org.gradle.kotlin.dsl.named
 import org.gradle.kotlin.dsl.withType
 import org.gradle.language.jvm.tasks.ProcessResources
 import org.gradle.process.CommandLineArgumentProvider
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.extensions.IntelliJPlatformDependenciesExtension
 import org.jetbrains.intellij.platform.gradle.extensions.IntelliJPlatformExtension
 import org.jetbrains.intellij.platform.gradle.extensions.IntelliJPlatformRepositoriesExtension
+import org.jetbrains.intellij.platform.gradle.extensions.IntelliJPlatformTestingExtension
 import org.jetbrains.intellij.platform.gradle.tasks.BuildPluginTask
+import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel
 import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
@@ -27,6 +31,9 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 
 private val dialects = listOf("doris", "duckdb", "trino", "sql-transpiler")
+private val kotlinHosts = listOf("com.intellij.java", "org.jetbrains.kotlin")
+private const val ISOLATION_TESTS = "**/*Isolation*Test.class"
+private const val RUNTIME_ALIAS = "intellij.runtime."
 private val platformSerialization = listOf("core", "json").flatMap { listOf("kotlinx-serialization-$it", "kotlinx-serialization-$it-jvm") }
 
 class SqlDialectPlugin : Plugin<Project> {
@@ -42,10 +49,21 @@ class SqlDialectPlugin : Plugin<Project> {
         val siblings = dialects - dialect
         val extension = extensions.create<SqlDialectPluginExtension>("sqlDialectPlugin").apply {
             pluginId.convention("dev.sort.$name")
-            bundledPlugins.convention(
-                listOf("com.intellij.database", "com.intellij.modules.json", "com.intellij.java", "org.jetbrains.kotlin", "Git4Idea"),
-            )
+            bundledPlugins.convention(listOf("com.intellij.database", "com.intellij.modules.json", "Git4Idea") + kotlinHosts)
         }
+
+        val kotlinMode = providers.gradleProperty("test.kotlin").getOrElse("present")
+        require(kotlinMode in setOf("present", "absent")) { "test.kotlin must be present or absent" }
+        val sqlTranspilerMode = providers.gradleProperty("test.sqlTranspiler").orNull
+        require(sqlTranspilerMode in setOf(null, "installed", "absent")) { "test.sqlTranspiler must be installed or absent" }
+        val pluginIsolation = providers.gradleProperty("test.pluginIsolation").orNull == "true"
+        val siblingZips = (siblings - "sql-transpiler").mapNotNull { sibling ->
+            providers.gradleProperty("test.${sibling}PluginZip").orNull?.let { sibling to file(it) }
+        }.toMap()
+        siblingZips.forEach { (sibling, zip) -> require(zip.isFile) { "Missing $sibling plugin ZIP: $zip" } }
+        val sqlTranspilerPlugin = "dev.sort.sql-transpiler-intellij-plugin:${version("sql-transpiler-plugin")}"
+            .takeIf { sqlTranspilerMode == "installed" && "sql-transpiler" in siblings }
+        val installedSiblings = siblingZips.keys + listOfNotNull("sql-transpiler".takeIf { sqlTranspilerPlugin != null })
 
         repositories.mavenLocal {
             content { includeVersionByRegex("dev\\.brikk\\..*", ".*", ".*-SNAPSHOT") }
@@ -60,6 +78,8 @@ class SqlDialectPlugin : Plugin<Project> {
             val localIde = providers.gradleProperty("$dialect.localIde")
             if (localIde.isPresent) local(localIde) else intellijIdea(version("intellij-sdk"))
             bundledPlugins(extension.bundledPlugins)
+            sqlTranspilerPlugin?.let { plugin(it) }
+            siblingZips.values.forEach { localPlugin(it) }
             testFramework(TestFrameworkType.Platform)
         }
         configurations.named("runtimeClasspath") {
@@ -110,15 +130,64 @@ class SqlDialectPlugin : Plugin<Project> {
             }
         }
 
-        val testPluginIds = extension.bundledPlugins.zip(extension.pluginId) { bundled, id -> (bundled + id).joinToString(",") }
+        val testPluginIds = extension.bundledPlugins.zip(extension.pluginId) { bundled, id ->
+            (bundled.filter { kotlinMode == "present" || it !in kotlinHosts } + id + installedSiblings.map { "dev.sort.$it-intellij-plugin" })
+                .joinToString(",")
+        }
         val siblingPaths = siblings.map { "/$it-intellij-plugin/" }
+        val sourceSets = extensions.getByType<SourceSetContainer>()
+        val productFiles = files(
+            sourceSets.named("main").map { it.output },
+            layout.buildDirectory.dir("instrumented/instrumentCode"),
+            sourceSets.named("test").map { it.output.resourcesDir!! },
+            configurations.named("runtimeClasspath"),
+        )
+        val productJarPrefix = "$name-"
+        val sandboxLibraries = "/$name/lib/"
         fun Test.configureSuite() {
             useJUnit()
             systemProperty("java.awt.headless", "true")
+            systemProperty("test.kotlin", kotlinMode)
+            systemProperty("test.pluginIsolation", pluginIsolation.toString())
+            systemProperty("test.siblingPlugins", siblingZips.keys.joinToString(","))
+            sqlTranspilerMode?.let { systemProperty("test.sqlTranspiler", it) }
             jvmArgumentProviders.add(CommandLineArgumentProvider { listOf("-Didea.load.plugins.id=${testPluginIds.get()}") })
-            classpath = classpath.filter { entry ->
-                siblingPaths.none { it in entry.path } || !(entry.name.startsWith("brikk-") || entry.name.startsWith("kotlin-stdlib"))
+            if (kotlinMode == "absent") exclude("**/brikk/**")
+            if (pluginIsolation) {
+                include(ISOLATION_TESTS)
+                classpath = (classpath - productFiles).filter { entry ->
+                    siblingPaths.none { it in entry.path } && !entry.name.startsWith(productJarPrefix) && sandboxLibraries !in entry.path
+                }
+                jvmArgumentProviders.add(CommandLineArgumentProvider {
+                    listOf("-Didea.force.use.core.classloader=true", "-Didea.use.core.classloader.for.plugin.path=false")
+                })
+            } else {
+                include("**/*Test.class")
+                exclude(ISOLATION_TESTS)
+                classpath = classpath.filter { entry ->
+                    siblingPaths.none { it in entry.path } || !(entry.name.startsWith("brikk-") || entry.name.startsWith("kotlin-stdlib"))
+                }
             }
+        }
+
+        val testing = extensions.getByType<IntelliJPlatformTestingExtension>()
+        catalog.versionAliases.filter { it.startsWith(RUNTIME_ALIAS) }.forEach { alias ->
+            val generation = alias.removePrefix(RUNTIME_ALIAS)
+            testing.testIde.register("test$generation") {
+                type.set(IntelliJPlatformType.IntellijIdea)
+                version.set(catalog.findVersion(alias).get().requiredVersion)
+                providers.gradleProperty("test.ide$generation").orNull?.let { localPath.set(file(it)) }
+                testFramework(TestFrameworkType.Platform)
+                plugins {
+                    bundledPlugins(extension.bundledPlugins)
+                    sqlTranspilerPlugin?.let { plugin(it) }
+                    siblingZips.values.forEach { localPlugin(it) }
+                }
+                task { configureSuite() }
+            }
+        }
+        if (installedSiblings.isNotEmpty()) tasks.named<PrepareSandboxTask>("prepareTestSandbox") {
+            sandboxSuffix.set("-test-" + installedSiblings.sorted().joinToString("-"))
         }
 
         tasks.named<ProcessResources>("processResources") {
