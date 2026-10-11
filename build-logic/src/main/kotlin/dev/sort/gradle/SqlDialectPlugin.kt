@@ -90,9 +90,10 @@ class SqlDialectPlugin : Plugin<Project> {
         repositories.mavenCentral()
         (repositories as ExtensionAware).extensions.configure<IntelliJPlatformRepositoriesExtension> { defaultRepositories() }
 
+        val excludePlatformKotlin = extension.excludePlatformKotlin
         val serialization = catalog.findLibrary("kotlinx-serialization-json").get()
         configurations.named("compileOnly") {
-            dependencies.addAllLater(extension.excludePlatformKotlin.zip(serialization) { excluded, library -> listOfNotNull(library.takeIf { excluded }) })
+            dependencies.addAllLater(excludePlatformKotlin.zip(serialization) { excluded, library -> listOfNotNull(library.takeIf { excluded }) })
         }
         dependencies.add("testImplementation", "org.jetbrains.kotlin:kotlin-test")
         dependencies.add("testImplementation", catalog.findLibrary("junit").get())
@@ -104,7 +105,6 @@ class SqlDialectPlugin : Plugin<Project> {
             siblingZips.values.forEach { localPlugin(it) }
             testFramework(TestFrameworkType.Platform)
         }
-        val excludePlatformKotlin = extension.excludePlatformKotlin
         dependencies.components.all {
             if (id.group == "dev.brikk.house" && excludePlatformKotlin.get()) allVariants {
                 withDependencies {
