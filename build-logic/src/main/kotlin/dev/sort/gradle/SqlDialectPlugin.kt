@@ -228,7 +228,12 @@ class SqlDialectPlugin : Plugin<Project> {
             internalApiPackages.set(extension.internalApiPackages)
             internalApiAllowedIn.set(extension.internalApiAllowedIn)
         }
-        tasks.named("check") { dependsOn(verifyDistribution) }
+        val verifyBuildLogic = tasks.register<VerifyBuildLogic>("verifyBuildLogic") {
+            group = "verification"
+            description = "Checks that build-logic matches the commit recorded in build-logic/VENDORED-FROM."
+            directory.set(layout.projectDirectory.dir("build-logic"))
+        }
+        tasks.named("check") { dependsOn(verifyDistribution, verifyBuildLogic) }
 
         val ideaVersion = extensions.getByType<IntelliJPlatformExtension>().pluginConfiguration.ideaVersion
         tasks.register<DogfoodZip>("dogfoodZip") {
