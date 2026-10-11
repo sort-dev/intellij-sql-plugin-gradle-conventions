@@ -68,8 +68,9 @@ class SqlDialectPlugin : Plugin<Project> {
             .takeIf { sqlTranspilerMode == "installed" && "sql-transpiler" in siblings }
         val installedSiblings = siblingZips.keys + listOfNotNull("sql-transpiler".takeIf { sqlTranspilerPlugin != null })
 
-        repositories.mavenLocal {
-            content { includeVersionByRegex("dev\\.brikk\\..*", ".*", ".*-SNAPSHOT") }
+        repositories.exclusiveContent {
+            forRepositories(repositories.mavenLocal())
+            filter { includeVersionByRegex("dev\\.brikk\\.house", ".*", ".*-SNAPSHOT") }
         }
         repositories.mavenCentral()
         (repositories as ExtensionAware).extensions.configure<IntelliJPlatformRepositoriesExtension> { defaultRepositories() }

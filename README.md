@@ -46,6 +46,8 @@ dependencies {
 
 `gradle.properties` keeps `kotlin.stdlib.default.dependency=false`.
 
+`dev.brikk.house` snapshot versions resolve only from Maven Local, even when a build declares a snapshot repository; released versions come from Maven Central.
+
 The plugin applies Kotlin JVM and the IntelliJ Platform Gradle plugin, compiles for Java 21 against the catalog's 261 SDK (`-P<dialect>.localIde=<path>` uses a local IDE instead), sets since/until builds, adds the database, JSON, Java, Kotlin and Git bundled plugins, configures the Plugin Verifier with a project-local cache, packages `LICENSE`, `NOTICE` and `THIRD_PARTY_NOTICES.md` into `META-INF`, and keeps the Kotlin standard library and kotlinx-serialization out of the distribution. A plugin can pin a different version in its settings with `version("<alias>", "<version>")` inside `create("libs")`.
 
 ### `sqlDialectPlugin`
