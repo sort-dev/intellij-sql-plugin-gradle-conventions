@@ -34,6 +34,8 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 
 private val dialects = listOf("doris", "duckdb", "trino", "sql-transpiler")
 private val kotlinHosts = listOf("com.intellij.java", "org.jetbrains.kotlin")
+private const val JSON = "com.intellij.modules.json"
+private const val GIT = "Git4Idea"
 private const val ISOLATION_TESTS = "**/*Isolation*Test.class"
 private const val RUNTIME_ALIAS = "intellij.runtime."
 private val platformSerialization = listOf("core", "json").flatMap { listOf("kotlinx-serialization-$it", "kotlinx-serialization-$it-jvm") }
@@ -53,9 +55,9 @@ class SqlDialectPlugin : Plugin<Project> {
             pluginId.convention("dev.sort.$name")
             excludePlatformKotlin.convention(true)
             kotlinTests.convention(true)
-            bundledPlugins.convention(listOf("com.intellij.database", "com.intellij.modules.json", "Git4Idea") + kotlinHosts)
         }
 
+        val platformPlugins = extension.additionalBundledPlugins.map { listOf("com.intellij.database", JSON) + kotlinHosts + it }
         val kotlinMode = providers.gradleProperty("test.kotlin").orNull
         require(kotlinMode in setOf(null, "present", "absent")) { "test.kotlin must be present or absent" }
         val sqlTranspilerMode = providers.gradleProperty("test.sqlTranspiler").orNull
@@ -82,13 +84,16 @@ class SqlDialectPlugin : Plugin<Project> {
         repositories.mavenCentral()
         (repositories as ExtensionAware).extensions.configure<IntelliJPlatformRepositoriesExtension> { defaultRepositories() }
 
-        dependencies.add("compileOnly", catalog.findLibrary("kotlinx-serialization-json").get())
+        val serialization = catalog.findLibrary("kotlinx-serialization-json").get()
+        configurations.named("compileOnly") {
+            dependencies.addAllLater(extension.excludePlatformKotlin.zip(serialization) { excluded, library -> listOfNotNull(library.takeIf { excluded }) })
+        }
         dependencies.add("testImplementation", "org.jetbrains.kotlin:kotlin-test")
         dependencies.add("testImplementation", catalog.findLibrary("junit").get())
         dependencies.extensions.configure<IntelliJPlatformDependenciesExtension> {
             val localIde = providers.gradleProperty("$dialect.localIde")
             if (localIde.isPresent) local(localIde) else intellijIdea(version("intellij-sdk"))
-            bundledPlugins(extension.bundledPlugins)
+            bundledPlugins(platformPlugins)
             sqlTranspilerPlugin?.let { plugin(it) }
             siblingZips.values.forEach { localPlugin(it) }
             testFramework(TestFrameworkType.Platform)
@@ -142,8 +147,8 @@ class SqlDialectPlugin : Plugin<Project> {
             }
         }
 
-        val testPluginIds = extension.bundledPlugins.zip(extension.pluginId) { bundled, id -> bundled + id }.zip(kotlinTests) { ids, kotlin ->
-            (ids.filter { kotlin || it !in kotlinHosts } + installedSiblings.map { "dev.sort.$it-intellij-plugin" }).joinToString(",")
+        val testPluginIds = platformPlugins.zip(extension.pluginId) { bundled, id -> bundled - JSON + id }.zip(kotlinTests) { ids, kotlin ->
+            ids.filter { kotlin || it !in kotlinHosts } + installedSiblings.map { "dev.sort.$it-intellij-plugin" }
         }
         val siblingPaths = siblings.map { "/$it-intellij-plugin/" }
         val sourceSets = extensions.getByType<SourceSetContainer>()
@@ -155,14 +160,16 @@ class SqlDialectPlugin : Plugin<Project> {
         )
         val productJarPrefix = "$name-"
         val sandboxLibraries = "/$name/lib/"
-        fun Test.configureSuite() {
+        fun Test.configureSuite(extraPluginIds: List<String> = emptyList()) {
             useJUnit()
             systemProperty("java.awt.headless", "true")
             systemProperty("test.kotlin", if (kotlinTests.get()) "present" else "absent")
             systemProperty("test.pluginIsolation", pluginIsolation.toString())
             systemProperty("test.siblingPlugins", siblingZips.keys.joinToString(","))
             sqlTranspilerMode?.let { systemProperty("test.sqlTranspiler", it) }
-            jvmArgumentProviders.add(CommandLineArgumentProvider { listOf("-Didea.load.plugins.id=${testPluginIds.get()}") })
+            jvmArgumentProviders.add(CommandLineArgumentProvider {
+                listOf("-Didea.load.plugins.id=" + (testPluginIds.get() + extraPluginIds).distinct().joinToString(","))
+            })
             if (!kotlinTests.get()) exclude("**/brikk/**")
             if (pluginIsolation) {
                 include(ISOLATION_TESTS)
@@ -190,11 +197,11 @@ class SqlDialectPlugin : Plugin<Project> {
                 providers.gradleProperty("test.ide$generation").orNull?.let { localPath.set(file(it)) }
                 testFramework(TestFrameworkType.Platform)
                 plugins {
-                    bundledPlugins(extension.bundledPlugins)
+                    bundledPlugins(platformPlugins.map { (it + GIT).distinct() })
                     sqlTranspilerPlugin?.let { plugin(it) }
                     siblingZips.values.forEach { localPlugin(it) }
                 }
-                task { configureSuite() }
+                task { configureSuite(listOf(GIT)) }
             }
         }
         if (installedSiblings.isNotEmpty()) tasks.named<PrepareSandboxTask>("prepareTestSandbox") {

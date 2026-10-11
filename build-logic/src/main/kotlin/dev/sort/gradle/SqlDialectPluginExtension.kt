@@ -7,7 +7,7 @@ import org.gradle.api.provider.SetProperty
 
 abstract class SqlDialectPluginExtension {
     abstract val pluginId: Property<String>
-    abstract val bundledPlugins: ListProperty<String>
+    abstract val additionalBundledPlugins: ListProperty<String>
     abstract val excludePlatformKotlin: Property<Boolean>
     abstract val kotlinTests: Property<Boolean>
     abstract val embeddedLibraries: SetProperty<String>
