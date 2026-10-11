@@ -12,7 +12,6 @@ import org.gradle.api.tasks.testing.Test
 import org.gradle.jvm.tasks.Jar
 import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.create
-import org.gradle.kotlin.dsl.exclude
 import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.named
 import org.gradle.kotlin.dsl.register
@@ -52,6 +51,7 @@ class SqlDialectPlugin : Plugin<Project> {
         val siblings = dialects - dialect
         val extension = extensions.create<SqlDialectPluginExtension>("sqlDialectPlugin").apply {
             pluginId.convention("dev.sort.$name")
+            excludePlatformKotlin.convention(true)
             bundledPlugins.convention(listOf("com.intellij.database", "com.intellij.modules.json", "Git4Idea") + kotlinHosts)
         }
 
@@ -86,12 +86,13 @@ class SqlDialectPlugin : Plugin<Project> {
             siblingZips.values.forEach { localPlugin(it) }
             testFramework(TestFrameworkType.Platform)
         }
-        configurations.named("runtimeClasspath") {
-            exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib")
-            platformSerialization.forEach { exclude(group = "org.jetbrains.kotlinx", module = it) }
-        }
-        configurations.named("testRuntimeClasspath") {
-            platformSerialization.forEach { exclude(group = "org.jetbrains.kotlinx", module = it) }
+        val excludePlatformKotlin = extension.excludePlatformKotlin
+        dependencies.components.all {
+            if (id.group == "dev.brikk.house" && excludePlatformKotlin.get()) allVariants {
+                withDependencies {
+                    removeAll { it.group == "org.jetbrains.kotlin" && it.name == "kotlin-stdlib" || it.group == "org.jetbrains.kotlinx" && it.name in platformSerialization }
+                }
+            }
         }
 
         extensions.configure<JavaPluginExtension> {
