@@ -11,7 +11,8 @@ import org.gradle.api.tasks.TaskAction
 import org.gradle.work.DisableCachingByDefault
 
 private const val ORIGIN = "VENDORED-FROM"
-private val generated = setOf(ORIGIN, "build", ".gradle", ".kotlin")
+
+private fun File.untracked() = name == ORIGIN || name == "build" || name == "local.properties" || name.startsWith(".") || name.endsWith(".orig")
 
 @DisableCachingByDefault(because = "Verification only")
 abstract class VerifyBuildLogic : DefaultTask() {
@@ -22,7 +23,7 @@ abstract class VerifyBuildLogic : DefaultTask() {
     fun verify() {
         val root = directory.get().asFile
         val origin = root.resolve(ORIGIN).readLines().filter { it.isNotBlank() }.associate { it.substringBefore(' ') to it.substringAfter(' ') }
-        val tree = treeId(root, generated)?.let { HexFormat.of().formatHex(it) }
+        val tree = treeId(root)?.let { HexFormat.of().formatHex(it) }
         check(tree == origin["tree"]) {
             "build-logic differs from ${origin["repository"]} at ${origin["commit"]}: tree $tree, expected ${origin["tree"]}. " +
                 "Change it upstream and run sync-into.sh."
@@ -30,8 +31,8 @@ abstract class VerifyBuildLogic : DefaultTask() {
     }
 }
 
-private fun treeId(directory: File, ignored: Set<String> = emptySet()): ByteArray? {
-    val entries = directory.listFiles().orEmpty().filter { it.name !in ignored }.mapNotNull { file ->
+private fun treeId(directory: File): ByteArray? {
+    val entries = directory.listFiles().orEmpty().filterNot { it.untracked() }.mapNotNull { file ->
         when {
             file.isDirectory -> treeId(file)?.let { Triple("40000", file.name, it) }
             else -> Triple(if (file.canExecute()) "100755" else "100644", file.name, objectId("blob", file.readBytes()))

@@ -248,6 +248,8 @@ class SqlDialectPlugin : Plugin<Project> {
             directory.set(layout.projectDirectory.dir("build-logic"))
         }
         tasks.named("check") { dependsOn(verifyDistribution, verifyBuildLogic) }
+        buildPlugin.configure { dependsOn(verifyBuildLogic) }
+        tasks.named("assemble") { dependsOn(verifyBuildLogic) }
         val verifyRelease = tasks.register<VerifyRelease>("verifyRelease") {
             group = "verification"
             description = "Refuses snapshot libraries in a release version."
