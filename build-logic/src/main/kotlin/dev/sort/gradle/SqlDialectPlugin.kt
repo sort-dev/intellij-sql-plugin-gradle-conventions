@@ -4,15 +4,18 @@ import org.gradle.api.JavaVersion
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.artifacts.VersionCatalogsExtension
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.plugins.ExtensionAware
 import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.testing.Test
+import org.gradle.jvm.tasks.Jar
 import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.create
 import org.gradle.kotlin.dsl.exclude
 import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.named
+import org.gradle.kotlin.dsl.register
 import org.gradle.kotlin.dsl.withType
 import org.gradle.language.jvm.tasks.ProcessResources
 import org.gradle.process.CommandLineArgumentProvider
@@ -190,8 +193,9 @@ class SqlDialectPlugin : Plugin<Project> {
             sandboxSuffix.set("-test-" + installedSiblings.sorted().joinToString("-"))
         }
 
+        val licenseFiles = files("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md")
         tasks.named<ProcessResources>("processResources") {
-            from(files("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md")) { into("META-INF") }
+            from(licenseFiles) { into("META-INF") }
         }
         tasks.named<ProcessResources>("processTestResources") {
             from("src/main/resources/META-INF") {
@@ -199,10 +203,31 @@ class SqlDialectPlugin : Plugin<Project> {
                 into("META-INF")
             }
         }
-        tasks.named<BuildPluginTask>("buildPlugin") { archiveVersion.set("") }
         tasks.withType<VerifyPluginTask>().configureEach {
             systemProperty("plugin.verifier.home.dir", layout.buildDirectory.dir("plugin-verifier-cache").get().asFile.absolutePath)
         }
         tasks.named<Test>("test") { configureSuite() }
+
+        val buildPlugin = tasks.named<BuildPluginTask>("buildPlugin") { archiveVersion.set("") }
+        val verifyDistribution = tasks.register<VerifyDistribution>("verifyDistribution") {
+            group = "verification"
+            description = "Checks the embedded libraries, bytecode levels, notices and descriptor of the plugin ZIP."
+            distribution.set(buildPlugin.flatMap { it.archiveFile })
+            pluginJar.set(tasks.named<Jar>("composedJar").flatMap { it.archiveFileName })
+            pluginVersion.set(provider { project.version.toString() })
+            embeddedLibraries.set(extension.embeddedLibraries)
+            embeddedComponents.set(
+                configurations.named("runtimeClasspath").flatMap { it.incoming.artifacts.resolvedArtifacts }.map { artifacts ->
+                    artifacts.mapNotNull { (it.id.componentIdentifier as? ModuleComponentIdentifier)?.displayName }
+                },
+            )
+            bytecodeCeilings.set(extension.bytecodeCeilings)
+            legalFiles.from(licenseFiles)
+            requiredNotices.set(extension.requiredNotices)
+            siblingPluginIds.set(siblings.map { "dev.sort.$it-intellij-plugin" })
+            internalApiPackages.set(extension.internalApiPackages)
+            internalApiAllowedIn.set(extension.internalApiAllowedIn)
+        }
+        tasks.named("check") { dependsOn(verifyDistribution) }
     }
 }
