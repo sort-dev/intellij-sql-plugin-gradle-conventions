@@ -229,5 +229,17 @@ class SqlDialectPlugin : Plugin<Project> {
             internalApiAllowedIn.set(extension.internalApiAllowedIn)
         }
         tasks.named("check") { dependsOn(verifyDistribution) }
+
+        val ideaVersion = extensions.getByType<IntelliJPlatformExtension>().pluginConfiguration.ideaVersion
+        tasks.register<DogfoodZip>("dogfoodZip") {
+            group = "intellij platform"
+            description = "Copies the plugin ZIP to build/dogfood under its version, with a SHA-256 file."
+            distribution.set(buildPlugin.flatMap { it.archiveFile })
+            sinceBuild.set(ideaVersion.sinceBuild)
+            untilBuild.set(ideaVersion.untilBuild)
+            val path = provider { "dogfood/${project.name}-${project.version}.zip" }
+            archive.set(layout.buildDirectory.file(path))
+            checksum.set(layout.buildDirectory.file(path.map { "$it.sha256" }))
+        }
     }
 }
