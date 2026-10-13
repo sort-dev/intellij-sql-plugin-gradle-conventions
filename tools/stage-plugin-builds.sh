@@ -73,7 +73,8 @@ PY
         echo "FAILED $plugin: see $log"
         notices+=("$plugin: build failed; see $name-build.log"); failed=1; continue
     fi
-    if [[ $(git -C "$checkout" rev-parse HEAD) != "$sha" ]] || [[ -n $(git -C "$checkout" status --porcelain=v1 --untracked-files=all) ]]; then
+    current_branch=$(git -C "$checkout" symbolic-ref --short -q HEAD || echo detached)
+    if [[ $(git -C "$checkout" rev-parse HEAD) != "$sha" ]] || [[ "$current_branch" != "$branch" ]] || [[ -n $(git -C "$checkout" status --porcelain=v1 --untracked-files=all) ]]; then
         echo "SKIP $plugin: checkout changed while building; no ZIP copied"
         notices+=("$plugin: checkout changed while building; no ZIP copied"); failed=1; continue
     fi

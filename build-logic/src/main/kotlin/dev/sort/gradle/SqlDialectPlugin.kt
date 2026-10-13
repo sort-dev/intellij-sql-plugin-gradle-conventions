@@ -272,7 +272,7 @@ class SqlDialectPlugin : Plugin<Project> {
             group = "verification"
             description = "Checks the embedded libraries, bytecode levels, notices and descriptor of the plugin ZIP."
             distribution.set(buildPlugin.flatMap { it.archiveFile })
-            expectedVersion.set(buildVersion)
+            expectedVersion.set(buildPlugin.flatMap { it.archiveVersion })
             pluginJar.set(tasks.named<Jar>("composedJar").flatMap { it.archiveFileName })
             embeddedLibraries.set(extension.embeddedLibraries)
             embeddedComponents.set(embedded)
