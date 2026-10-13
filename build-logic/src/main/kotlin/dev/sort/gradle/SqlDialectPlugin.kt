@@ -71,7 +71,20 @@ class SqlDialectPlugin : Plugin<Project> {
         }
         val siblingZips = siblings.mapNotNull { sibling ->
             val property = "test.${if (sibling == "sql-transpiler") "sqlTranspiler" else sibling}PluginZip"
-            providers.gradleProperty(property).orNull?.let { sibling to file(it) }
+            val explicit = providers.gradleProperty(property).orNull?.let(::file)
+            val discover = pluginIsolation && !(sibling == "sql-transpiler" && sqlTranspilerMode != null)
+            val zip = explicit ?: if (discover) {
+                val worktree = rootDir.parentFile.takeIf { it.name == "$name-worktrees" }
+                val checkoutRoot = worktree?.parentFile ?: rootDir.parentFile
+                val checkouts = listOfNotNull(
+                    worktree?.let { checkoutRoot.resolve("$sibling-intellij-plugin-worktrees/${rootDir.name}") },
+                    checkoutRoot.resolve("$sibling-intellij-plugin"),
+                )
+                checkouts.firstNotNullOfOrNull { checkout ->
+                    checkout.resolve("build/distributions/$sibling-intellij-plugin.zip").takeIf { it.isFile }
+                } ?: error("Missing local $sibling plugin ZIP for isolation. Run ./gradlew buildPlugin in ${checkouts.joinToString()} or set -P$property=<zip>. Isolation does not fall back to Marketplace.")
+            } else null
+            zip?.let { sibling to it }
         }.toMap()
         siblingZips.forEach { (sibling, zip) -> require(zip.isFile) { "Missing $sibling plugin ZIP: $zip" } }
         require(sqlTranspilerMode == null || "sql-transpiler" !in siblingZips) {

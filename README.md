@@ -73,7 +73,7 @@ The plugin applies Kotlin JVM and the IntelliJ Platform Gradle plugin, compiles 
 | `test` | Headless suite on the 261 SDK |
 | `test262`, `test263` | The same suite on each `intellij-runtime-*` build in the catalog, with Git4Idea added; `-Ptest.ide<generation>=<path>` uses a local IDE |
 | `-Ptest.kotlin=present\|absent` | Overrides `kotlinTests` |
-| `-Ptest.pluginIsolation=true` | Runs only `*Isolation*Test`, without Kotlin, loading the plugin and its libraries through real plugin classloaders; refuses `-Ptest.kotlin=present` |
+| `-Ptest.pluginIsolation=true` | Runs only `*Isolation*Test`, without Kotlin, loading the plugin and its libraries through real plugin classloaders; refuses `-Ptest.kotlin=present`. Discovers local sibling ZIPs, preferring matching worktrees, then adjacent checkouts; missing ZIPs fail with build instructions, never a silent Marketplace fallback. |
 | `-Ptest.sqlTranspiler=installed` | Installs the SQL Transpiler plugin from Marketplace |
 | `-Ptest.<sibling>PluginZip=<zip>` | Installs a sibling plugin ZIP (`clickhouse`, `doris`, `duckdb`, `trino`, `sqlTranspiler`); `sqlTranspiler` cannot be combined with `-Ptest.sqlTranspiler` |
 
