@@ -1,6 +1,6 @@
 # intellij-sql-plugin-gradle-conventions
 
-Shared Gradle build logic for the sort-dev SQL dialect IntelliJ plugins (Doris, DuckDB, Trino, SQL Transpiler). Not published: each plugin vendors a copy into `build-logic/`.
+Shared Gradle build logic for the sort-dev SQL dialect IntelliJ plugins (ClickHouse, Doris, DuckDB, Trino, SQL Transpiler). Not published: each plugin vendors a copy into `build-logic/`.
 
 `build-logic/` holds the `dev.sort.sql-dialect-plugin` convention plugin and the shared version catalog, `build-logic/gradle/libs.versions.toml`.
 
@@ -48,7 +48,32 @@ dependencies {
 
 `dev.brikk.house` snapshot versions resolve only from Maven Local, even when a build declares a snapshot repository; released versions come from Maven Central.
 
-The plugin applies Kotlin JVM and the IntelliJ Platform Gradle plugin, compiles for Java 21 against the catalog's 261 SDK (`-P<dialect>.localIde=<path>` uses a local IDE instead), sets since/until builds, adds the database, JSON, Java and Kotlin bundled plugins, configures the Plugin Verifier with a project-local cache, packages the legal files into `META-INF`, and builds an unversioned `buildPlugin` ZIP. A plugin keeps its current versions by pinning them in settings with `version("<alias>", "<version>")` inside `create("libs")`, and overrides anything else with the usual DSL, for example `tasks.buildPlugin { archiveVersion = … }` or `kotlin { compilerOptions { jvmDefault = … } }`.
+The plugin applies Kotlin JVM and the IntelliJ Platform Gradle plugin, compiles for Java 21 against the catalog's 261 SDK (`-P<dialect>.localIde=<path>` uses a local IDE instead), sets since/until builds, adds the database, JSON, Java and Kotlin bundled plugins, configures the Plugin Verifier with a project-local cache, and packages the legal files into `META-INF`. A plugin keeps its dependency versions by pinning them in settings with `version("<alias>", "<version>")` inside `create("libs")`, and overrides anything else with the usual DSL.
+
+## Build versions and ZIP names
+
+Keep `version = "<base>"` in the plugin build. By default, the patched IDE descriptor
+and ZIP use `<base>-dev.<yyyyMMddHHmm UTC>+<12-character git sha>`, adding `.dirty`
+for tracked or untracked changes. The time is HEAD's committer time, not build time.
+Ignored outputs do not mark a build dirty. Git is a configuration-cache input, so
+new commits and clean/dirty transitions invalidate the cached version.
+
+ZIPs are `build/distributions/<last part of plugin id>-<version>.zip`, for example
+`duckdb-intellij-plugin-0.4.0-dev.202610132007+661798ef63e4.zip`.
+`verifyDistribution` requires the descriptor version to match that build version.
+`dogfoodZip` preserves the same filename.
+
+`./gradlew buildPlugin -Prelease=true` uses the declared base unchanged. It does
+not choose a release number or publish anything. `publishPlugin` refuses dev
+labels; release verification still refuses snapshot dependencies for stable bases.
+
+**IntelliJ ordering:** its comparator treats `-dev` as newer than the same bare
+base, not as a SemVer prerelease. Thus `0.3.5 < 0.4.0-dev.… < 0.4.1`, but a bare
+`0.4.0` does not automatically replace `0.4.0-dev.…`. Use manual downgrade/removal
+to install that same-base release, or let the owner choose a later release base.
+Dates order different minutes; SHA strings distinguish commits within a minute,
+not their chronological order. Dirty labels identify uncommitted builds, not each
+individual dirty edit; staging refuses them.
 
 ### `sqlDialectPlugin`
 
@@ -73,7 +98,7 @@ The plugin applies Kotlin JVM and the IntelliJ Platform Gradle plugin, compiles 
 | `test` | Headless suite on the 261 SDK |
 | `test262`, `test263` | The same suite on each `intellij-runtime-*` build in the catalog, with Git4Idea added; `-Ptest.ide<generation>=<path>` uses a local IDE |
 | `-Ptest.kotlin=present\|absent` | Overrides `kotlinTests` |
-| `-Ptest.pluginIsolation=true` | Runs only `*Isolation*Test`, without Kotlin, loading the plugin and its libraries through real plugin classloaders; refuses `-Ptest.kotlin=present`. Discovers local sibling ZIPs, preferring matching worktrees, then adjacent checkouts; missing ZIPs fail with build instructions, never a silent Marketplace fallback. |
+| `-Ptest.pluginIsolation=true` | Runs only `*Isolation*Test`, without Kotlin, loading the plugin and its libraries through real plugin classloaders; refuses `-Ptest.kotlin=present`. Discovers the newest matching versioned ZIP by modification time, preferring matching worktrees, then adjacent checkouts. Legacy unversioned ZIPs remain accepted until peers sync. Missing ZIPs fail with build instructions, never a silent Marketplace fallback. |
 | `-Ptest.sqlTranspiler=installed` | Installs the SQL Transpiler plugin from Marketplace |
 | `-Ptest.<sibling>PluginZip=<zip>` | Installs a sibling plugin ZIP (`clickhouse`, `doris`, `duckdb`, `trino`, `sqlTranspiler`); `sqlTranspiler` cannot be combined with `-Ptest.sqlTranspiler` |
 
@@ -85,6 +110,28 @@ Tests receive `test.kotlin`, `test.pluginIsolation`, `test.sqlTranspiler` (`inst
 - `verifyRelease` (required by `publishPlugin`): refuses `-SNAPSHOT` libraries in a release version. `check` and `dogfoodZip` allow them for local development.
 - `dogfoodZip`: copies the ZIP to `build/dogfood/<name>-<version>.zip`, writes a `.sha256` beside it and prints the since/until builds.
 - `verifyBuildLogic` (part of `check`, `assemble` and `buildPlugin`): fails when `build-logic/` differs from the commit it was vendored from.
+
+## Staging the five plugins
+
+```sh
+tools/stage-plugin-builds.sh --dry-run
+tools/stage-plugin-builds.sh
+```
+
+The dry run only reads Git/checkouts and prints the commands. The real run builds
+`buildPlugin` for the Doris, DuckDB, Trino and SQL Transpiler `grand-unification`
+worktrees under `/home/jayson/DEV/sortdev`, plus `clickhouse-intellij-plugin`.
+It uses an in-memory Gradle init script to apply the same dev label even to a peer
+that has not yet synced these conventions. It never edits sources, syncs, commits,
+publishes or rewrites a built ZIP. Only normal ignored build outputs are produced.
+
+Clean successful artifacts go to
+`/home/jayson/DEV/sortdev/plugin-builds/<yyyyMMdd-HHmm UTC>/`. `MANIFEST.md` records
+plugin id, IDE version, branch/full SHA, source checkout, IDE since/until range,
+ZIP SHA-256 and built-at UTC. Build logs are kept beside it. Dirty, failed or
+concurrently changed checkouts are skipped and reported; a partial real run exits
+nonzero. Existing minute directories and ZIPs are never overwritten. Use
+`--output-root DIR` only when a different staging root is wanted.
 
 ## Syncing
 

@@ -1,0 +1,20 @@
+// In-memory overrides let staging use the same dev labels even before every
+// checkout has synced the convention. No source file or built ZIP is rewritten.
+gradle.projectsEvaluated {
+    rootProject.allprojects { project ->
+        if (!project.plugins.hasPlugin('dev.sort.sql-dialect-plugin')) return
+        def identity = project.findProperty('stageDevIdentity')
+        if (!identity || !(identity ==~ /[0-9]{12}\+[0-9a-f]{12,}/)) {
+            throw new GradleException('Staging requires a clean Git identity from stage-plugin-builds.sh')
+        }
+        def base = project.version.toString()
+        if (base == 'unspecified') throw new GradleException('Declare the plugin base version before staging')
+        def version = "${base}-dev.${identity}"
+        def id = project.extensions.getByName('sqlDialectPlugin').pluginId.get()
+        project.extensions.getByName('intellijPlatform').pluginConfiguration.version.set(version)
+        project.tasks.named('buildPlugin').configure {
+            archiveBaseName.set(id.substring(id.lastIndexOf('.') + 1))
+            archiveVersion.set(version)
+        }
+    }
+}
