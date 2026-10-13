@@ -75,7 +75,7 @@ The plugin applies Kotlin JVM and the IntelliJ Platform Gradle plugin, compiles 
 | `-Ptest.kotlin=present\|absent` | Overrides `kotlinTests` |
 | `-Ptest.pluginIsolation=true` | Runs only `*Isolation*Test`, without Kotlin, loading the plugin and its libraries through real plugin classloaders; refuses `-Ptest.kotlin=present` |
 | `-Ptest.sqlTranspiler=installed` | Installs the SQL Transpiler plugin from Marketplace |
-| `-Ptest.<sibling>PluginZip=<zip>` | Installs a sibling plugin ZIP (`doris`, `duckdb`, `trino`, `sqlTranspiler`); `sqlTranspiler` cannot be combined with `-Ptest.sqlTranspiler` |
+| `-Ptest.<sibling>PluginZip=<zip>` | Installs a sibling plugin ZIP (`clickhouse`, `doris`, `duckdb`, `trino`, `sqlTranspiler`); `sqlTranspiler` cannot be combined with `-Ptest.sqlTranspiler` |
 
 Tests receive `test.kotlin`, `test.pluginIsolation`, `test.sqlTranspiler` (`installed` for either source) and `test.siblingPlugins` (the dialect ZIPs) as system properties. Sibling plugins' private `brikk-*` and Kotlin standard library jars are filtered from the flattened test classpath.
 

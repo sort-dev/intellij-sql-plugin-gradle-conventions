@@ -31,7 +31,7 @@ import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLeve
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 
-private val dialects = listOf("doris", "duckdb", "trino", "sql-transpiler")
+private val dialects = listOf("clickhouse", "doris", "duckdb", "trino", "sql-transpiler")
 private val kotlinHosts = listOf("com.intellij.java", "org.jetbrains.kotlin")
 private const val JSON = "com.intellij.modules.json"
 private const val GIT = "Git4Idea"
@@ -158,6 +158,11 @@ class SqlDialectPlugin : Plugin<Project> {
         }
         val siblingPaths = siblings.map { "/$it-intellij-plugin/" }
         val sourceSets = extensions.getByType<SourceSetContainer>()
+        sourceSets.configureEach {
+            compileClasspath = compileClasspath.filter { entry ->
+                siblingPaths.none { it in entry.path } || !(entry.name.startsWith("brikk-") || entry.name.startsWith("kotlin-stdlib"))
+            }
+        }
         val productFiles = files(
             sourceSets.named("main").map { it.output },
             layout.buildDirectory.dir("instrumented/instrumentCode"),
