@@ -108,6 +108,7 @@ Tests receive `test.kotlin`, `test.pluginIsolation`, `test.sqlTranspiler` (`inst
 
 - `verifyDistribution` (part of `check`, required by `publishPlugin`): checks the plugin ZIP's embedded jars against `embeddedLibraries`, duplicate jars, class file versions, the packaged legal files against the project's, `requiredNotices` and every embedded `dev.brikk.house` `artifact:version` in `THIRD_PARTY_NOTICES.md`, and that `plugin.xml` declares no dependency on a sibling plugin.
 - `verifyRelease` (required by `publishPlugin`): refuses `-SNAPSHOT` libraries in a release version. `check` and `dogfoodZip` allow them for local development.
+- `verifyBundledSnapshotHashes` (explicit only): compares every resolved `dev.brikk.house` snapshot JAR in the ZIP with Maven Local by full SHA-256. Run `./gradlew buildPlugin verifyBundledSnapshotHashes` for local snapshot delivery checks. Missing, duplicate or stale bundled JARs fail. Released libraries are not compared; tests, builds and release tasks do not depend on this check. Uses `maven.repo.local` when set, otherwise `~/.m2/repository`.
 - `dogfoodZip`: copies the ZIP to `build/dogfood/<name>-<version>.zip`, writes a `.sha256` beside it and prints the since/until builds.
 - `verifyBuildLogic` (part of `check`, `assemble` and `buildPlugin`): fails when `build-logic/` differs from the commit it was vendored from.
 
