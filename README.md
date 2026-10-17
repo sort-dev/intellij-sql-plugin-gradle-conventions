@@ -108,6 +108,8 @@ even on failure. `api-usage-approvals.txt` lists exact owner-confirmed internal 
 with comments recording the approval source. A method used in another class or an additional usage
 is not covered. No findings are removed or suppressed in the verifier. Approval does not transfer
 between plugins. Experimental findings remain a separate review item.
+Experimental markers on our own `dev.brikk.*` or `dev.sort.*` APIs are prohibited and block release,
+including when an older published library reintroduces them into an otherwise cleaned source checkout.
 
 A plugin calls it from `.github/workflows/release.yml`, pinned to a commit of this
 repository:
