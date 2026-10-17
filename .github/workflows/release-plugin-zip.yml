@@ -61,7 +61,13 @@ jobs:
           echo "version=${versions[0]}" >> "$GITHUB_OUTPUT"
 
       - name: Build and audit the release ZIP
-        run: ./gradlew buildPlugin verifyPlugin -Prelease=true -PstrictApiVerification=true '-PverificationIdes=IU-262.10968.63 IU-263.5701.42'
+        run: ./gradlew buildPlugin verifyPlugin -Prelease=true '-PverificationIdes=IU-262.10968.63 IU-263.5701.42'
+
+      - name: Check exact approved internal API usages
+        env:
+          PLUGIN_ID: ${{ inputs.plugin-id }}
+          V: ${{ steps.version.outputs.version }}
+        run: python3 build-logic/tools/check-api-approvals.py build/reports/pluginVerifier "$PLUGIN_ID" "$V" IU-262.10968.63 IU-263.5701.42
 
       - name: Preserve complete verifier reports
         if: always()

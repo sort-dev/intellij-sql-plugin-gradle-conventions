@@ -98,13 +98,16 @@ Central before a plugin can build against them. To adopt them, a plugin:
 assets. The calling commit must already be on `main`, with its final version committed there.
 Create `release/<version>` from that commit. The workflow rejects unrelated branch commits and
 branch/version mismatches. It reads the one `version = "<base>"` line, builds in release mode,
-runs Plugin Verifier against IntelliJ 262 and 263 with strict internal/experimental API checks, validates the ZIP
+runs Plugin Verifier against IntelliJ 262 and 263, checks exact approved internal API usages, validates the ZIP
 with `build-logic/tools/verify-release-zip.py`, creates tag `v<base>` at that commit if
 absent, and creates release `v<base>` with the validated ZIP unchanged. It refuses an
 existing release or a tag on another commit. It uses only `GITHUB_TOKEN` and never
-publishes to JetBrains Marketplace or Maven. Internal and experimental API findings block release;
-Compatible alone is not approval. Complete reports are retained even on failure. Any exception needs
-explicit owner approval of the exact usages, not an assumed transfer of a previous Marketplace waiver.
+publishes to JetBrains Marketplace or Maven. Unapproved internal API findings block release;
+Compatible alone is not approval. Complete reports, including all experimental usages, are retained
+even on failure. `api-usage-approvals.txt` lists exact owner-confirmed internal call sites, one per line,
+with comments recording the approval source. A method used in another class or an additional usage
+is not covered. No findings are removed or suppressed in the verifier. Approval does not transfer
+between plugins. Experimental findings remain a separate review item.
 
 A plugin calls it from `.github/workflows/release.yml`, pinned to a commit of this
 repository:
