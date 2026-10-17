@@ -1,5 +1,6 @@
 package dev.sort.gradle
 
+import java.io.File
 import org.gradle.api.JavaVersion
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -265,8 +266,25 @@ class SqlDialectPlugin : Plugin<Project> {
             archiveBaseName.set(extension.pluginId.map { it.substringAfterLast('.') })
             archiveVersion.set(buildVersion)
         }
-        val embedded = configurations.named("runtimeClasspath").flatMap { it.incoming.artifacts.resolvedArtifacts }.map { artifacts ->
+        val runtimeArtifacts = configurations.named("runtimeClasspath").flatMap { it.incoming.artifacts.resolvedArtifacts }
+        val embedded = runtimeArtifacts.map { artifacts ->
             artifacts.mapNotNull { (it.id.componentIdentifier as? ModuleComponentIdentifier)?.displayName }
+        }
+        tasks.register<VerifyBundledSnapshotHashes>("verifyBundledSnapshotHashes") {
+            group = "verification"
+            description = "Explicitly compares bundled dev.brikk.house snapshots with Maven Local by SHA-256."
+            distribution.set(buildPlugin.flatMap { it.archiveFile })
+            snapshotPaths.set(runtimeArtifacts.map { artifacts ->
+                artifacts.mapNotNull { artifact ->
+                    val id = artifact.id.componentIdentifier as? ModuleComponentIdentifier ?: return@mapNotNull null
+                    if (id.group != "dev.brikk.house" || !id.version.endsWith("-SNAPSHOT") || artifact.file.extension != "jar")
+                        return@mapNotNull null
+                    val classifier = artifact.file.nameWithoutExtension.substringAfter("-${id.version}", "")
+                    artifact.file.name to "${id.group.replace('.', '/')}/${id.module}/${id.version}/${id.module}-${id.version}$classifier.jar"
+                }.toMap()
+            })
+            mavenLocal.set(layout.dir(providers.systemProperty("maven.repo.local")
+                .orElse(providers.systemProperty("user.home").map { "$it/.m2/repository" }).map { File(it) }))
         }
         val verifyDistribution = tasks.register<VerifyDistribution>("verifyDistribution") {
             group = "verification"
@@ -298,6 +316,7 @@ class SqlDialectPlugin : Plugin<Project> {
             embeddedComponents.set(embedded)
         }
         tasks.named("publishPlugin") { dependsOn(verifyDistribution, verifyRelease) }
+        if (release.get()) buildPlugin.configure { dependsOn(verifyRelease) }
 
         val ideaVersion = extensions.getByType<IntelliJPlatformExtension>().pluginConfiguration.ideaVersion
         tasks.register<DogfoodZip>("dogfoodZip") {

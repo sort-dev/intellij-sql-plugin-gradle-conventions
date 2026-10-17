@@ -1,0 +1,75 @@
+name: Release plugin ZIP
+
+on:
+  workflow_call:
+    inputs:
+      plugin-id:
+        description: Plugin ID, for example dev.sort.doris-intellij-plugin
+        required: true
+        type: string
+      title:
+        description: Release title before the version; defaults to the plugin ID
+        required: false
+        type: string
+        default: ""
+      java-version:
+        required: false
+        type: string
+        default: "21"
+
+jobs:
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Read the release version
+        id: version
+        env:
+          PLUGIN_ID: ${{ inputs.plugin-id }}
+        run: |
+          set -euo pipefail
+          [[ $PLUGIN_ID =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "Invalid plugin ID: $PLUGIN_ID"; exit 1; }
+          mapfile -t versions < <(sed -n 's/^version = "\([^"]*\)"$/\1/p' build.gradle.kts)
+          [[ ${#versions[@]} -eq 1 && ${versions[0]} =~ ^[0-9]+(\.[0-9]+)+$ ]] ||
+            { echo "build.gradle.kts must declare one release version, found: ${versions[*]:-none}"; exit 1; }
+          echo "version=${versions[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Build the release ZIP
+        run: ./gradlew buildPlugin -Prelease=true
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLUGIN_ID: ${{ inputs.plugin-id }}
+          TITLE: ${{ inputs.title || inputs.plugin-id }}
+          V: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          ZIP=$(python3 build-logic/tools/verify-release-zip.py build/distributions "$PLUGIN_ID" "$V")
+          if gh release view "v$V" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release v$V already exists"; exit 1
+          fi
+          if tagged=$(gh api "repos/$GITHUB_REPOSITORY/commits/v$V" --jq .sha 2>/dev/null); then
+            [[ $tagged == "$GITHUB_SHA" ]] || { echo "Tag v$V points to $tagged, not $GITHUB_SHA"; exit 1; }
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/v$V" -f "sha=$GITHUB_SHA" >/dev/null
+          fi
+          gh release create "v$V" "$ZIP" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "$TITLE $V" \
+            --notes "Plugin ZIP for manual installation (Settings → Plugins → ⚙ → Install Plugin from Disk).
+          Built from \`$GITHUB_REF_NAME\` @ $GITHUB_SHA. See plugin.xml change-notes for details."
