@@ -81,7 +81,16 @@ Central before a plugin can build against them. To adopt them, a plugin:
 3. Builds the release with `./gradlew buildPlugin -Prelease=true` (or `publishPlugin
    -Prelease=true`). Its release workflow checks that the ZIP is named
    `<plugin>-<base>.zip` and that `META-INF/plugin.xml` declares `<version><base></version>`;
-   it never renames a dev ZIP into a release.
+   it never renames a dev ZIP into a release. The shared check does this and prints
+   the validated path to upload unchanged:
+
+   ```sh
+   ZIP=$(python3 build-logic/tools/verify-release-zip.py dist dev.sort.doris-intellij-plugin "$V")
+   ```
+
+   It requires exactly one ZIP in the directory, `<name>/lib/<name>-<base>.jar` as the
+   only main jar, and the descriptor's `<id>` and `<version>` (parsed as XML). Its test
+   runs with `python3 build-logic/tools/verify-release-zip-test.py`.
 
 **IntelliJ ordering:** its comparator treats `-dev` as newer than the same bare
 base, not as a SemVer prerelease. Thus `0.3.5 < 0.4.0-dev.… < 0.4.1`, but a bare
