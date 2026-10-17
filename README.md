@@ -92,6 +92,42 @@ Central before a plugin can build against them. To adopt them, a plugin:
    only main jar, and the descriptor's `<id>` and `<version>` (parsed as XML). Its test
    runs with `python3 build-logic/tools/verify-release-zip-test.py`.
 
+### Release workflow
+
+`.github/workflows/release-plugin-zip.yml` is a reusable workflow for GitHub release
+assets. In the calling repository at the calling commit it reads the one
+`version = "<base>"` line, runs `./gradlew buildPlugin -Prelease=true`, validates the ZIP
+with `build-logic/tools/verify-release-zip.py`, creates tag `v<base>` at that commit if
+absent, and creates release `v<base>` with the validated ZIP unchanged. It refuses an
+existing release or a tag on another commit. It uses only `GITHUB_TOKEN` and never
+publishes to JetBrains Marketplace or Maven. Tests and the Plugin Verifier stay in the
+plugin's own CI and local release checks.
+
+A plugin calls it from `.github/workflows/release.yml`, pinned to a commit of this
+repository:
+
+```yaml
+name: Release
+
+on:
+  push:
+    branches: [ 'release-*' ]
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    uses: sort-dev/intellij-sql-plugin-gradle-conventions/.github/workflows/release-plugin-zip.yml@<commit>
+    with:
+      plugin-id: dev.sort.doris-intellij-plugin
+      title: SQL Dialect for Apache Doris
+```
+
+`java-version` defaults to `21`. A plugin that already has a release job in `ci.yml`
+deletes that job so each `release-*` push creates one release. Workflow-only changes
+here need no re-sync; the vendored `build-logic/` must already contain
+`tools/verify-release-zip.py`.
+
 **IntelliJ ordering:** its comparator treats `-dev` as newer than the same bare
 base, not as a SemVer prerelease. Thus `0.3.5 < 0.4.0-dev.… < 0.4.1`, but a bare
 `0.4.0` does not automatically replace `0.4.0-dev.…`. Use manual downgrade/removal
