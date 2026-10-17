@@ -63,9 +63,25 @@ ZIPs are `build/distributions/<last part of plugin id>-<version>.zip`, for examp
 `verifyDistribution` requires the descriptor version to match that build version.
 `dogfoodZip` preserves the same filename.
 
-`./gradlew buildPlugin -Prelease=true` uses the declared base unchanged. It does
-not choose a release number or publish anything. `publishPlugin` refuses dev
-labels; release verification still refuses snapshot dependencies for stable bases.
+`./gradlew buildPlugin -Prelease=true` uses the declared base unchanged and runs
+`verifyRelease`, so a stable ZIP that embeds `-SNAPSHOT` libraries is never built.
+It does not choose a release number or publish anything. `publishPlugin` refuses dev
+labels and snapshot dependencies. Builds without `-Prelease=true` keep dev labels
+and allow Maven Local snapshots.
+
+### Releasing
+
+The catalog pins released Brikk libraries only: core, metadata and verify `0.20.0`,
+SQL support and test kit `0.2.0`, Kotlin helper `0.3.0`. They must be on Maven
+Central before a plugin can build against them. To adopt them, a plugin:
+
+1. Removes its `version("brikk-…", "…-SNAPSHOT")` overrides from `settings.gradle.kts`
+   and uses the catalog versions.
+2. Sets `version = "<next release base>"` in `build.gradle.kts`.
+3. Builds the release with `./gradlew buildPlugin -Prelease=true` (or `publishPlugin
+   -Prelease=true`). Its release workflow checks that the ZIP is named
+   `<plugin>-<base>.zip` and that `META-INF/plugin.xml` declares `<version><base></version>`;
+   it never renames a dev ZIP into a release.
 
 **IntelliJ ordering:** its comparator treats `-dev` as newer than the same bare
 base, not as a SemVer prerelease. Thus `0.3.5 < 0.4.0-dev.… < 0.4.1`, but a bare
@@ -107,7 +123,7 @@ Tests receive `test.kotlin`, `test.pluginIsolation`, `test.sqlTranspiler` (`inst
 ## Tasks
 
 - `verifyDistribution` (part of `check`, required by `publishPlugin`): checks the plugin ZIP's embedded jars against `embeddedLibraries`, duplicate jars, class file versions, the packaged legal files against the project's, `requiredNotices` and every embedded `dev.brikk.house` `artifact:version` in `THIRD_PARTY_NOTICES.md`, and that `plugin.xml` declares no dependency on a sibling plugin.
-- `verifyRelease` (required by `publishPlugin`): refuses `-SNAPSHOT` libraries in a release version. `check` and `dogfoodZip` allow them for local development.
+- `verifyRelease` (required by `publishPlugin`, and by `buildPlugin` with `-Prelease=true`): refuses dev labels and `-SNAPSHOT` libraries in a release version. Dev builds, `check` and `dogfoodZip` allow snapshots for local development.
 - `verifyBundledSnapshotHashes` (explicit only): compares every resolved `dev.brikk.house` snapshot JAR in the ZIP with Maven Local by full SHA-256. Run `./gradlew buildPlugin verifyBundledSnapshotHashes` for local snapshot delivery checks. Missing, duplicate or stale bundled JARs fail. Released libraries are not compared; tests, builds and release tasks do not depend on this check. Uses `maven.repo.local` when set, otherwise `~/.m2/repository`.
 - `dogfoodZip`: copies the ZIP to `build/dogfood/<name>-<version>.zip`, writes a `.sha256` beside it and prints the since/until builds.
 - `verifyBuildLogic` (part of `check`, `assemble` and `buildPlugin`): fails when `build-logic/` differs from the commit it was vendored from.
