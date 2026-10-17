@@ -25,6 +25,18 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require a release branch from main
+        run: |
+          set -euo pipefail
+          [[ $GITHUB_REF == refs/heads/release/* ]] || { echo "Release requires a release/<version> branch"; exit 1; }
+          git fetch origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "Release commit $GITHUB_SHA is not on main. Merge the code and version preparation into main first."
+            exit 1
+          }
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -45,10 +57,19 @@ jobs:
           mapfile -t versions < <(sed -n 's/^version = "\([^"]*\)"$/\1/p' build.gradle.kts)
           [[ ${#versions[@]} -eq 1 && ${versions[0]} =~ ^[0-9]+(\.[0-9]+)+$ ]] ||
             { echo "build.gradle.kts must declare one release version, found: ${versions[*]:-none}"; exit 1; }
+          [[ $GITHUB_REF_NAME == "release/${versions[0]}" ]] || { echo "Release branch must match the declared version"; exit 1; }
           echo "version=${versions[0]}" >> "$GITHUB_OUTPUT"
 
-      - name: Build the release ZIP
-        run: ./gradlew buildPlugin -Prelease=true
+      - name: Build and audit the release ZIP
+        run: ./gradlew buildPlugin verifyPlugin -Prelease=true -PstrictApiVerification=true '-PverificationIdes=IU-262.10968.63 IU-263.5701.42'
+
+      - name: Preserve complete verifier reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-verifier-reports
+          path: build/reports/pluginVerifier/
+          if-no-files-found: warn
 
       - name: Create the GitHub release
         env:
@@ -70,6 +91,7 @@ jobs:
           gh release create "v$V" "$ZIP" \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
+            --target "$GITHUB_SHA" \
             --title "$TITLE $V" \
             --notes "Plugin ZIP for manual installation (Settings → Plugins → ⚙ → Install Plugin from Disk).
           Built from \`$GITHUB_REF_NAME\` @ $GITHUB_SHA. See plugin.xml change-notes for details."

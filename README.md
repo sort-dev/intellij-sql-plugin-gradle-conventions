@@ -95,13 +95,16 @@ Central before a plugin can build against them. To adopt them, a plugin:
 ### Release workflow
 
 `.github/workflows/release-plugin-zip.yml` is a reusable workflow for GitHub release
-assets. In the calling repository at the calling commit it reads the one
-`version = "<base>"` line, runs `./gradlew buildPlugin -Prelease=true`, validates the ZIP
+assets. The calling commit must already be on `main`, with its final version committed there.
+Create `release/<version>` from that commit. The workflow rejects unrelated branch commits and
+branch/version mismatches. It reads the one `version = "<base>"` line, builds in release mode,
+runs Plugin Verifier against IntelliJ 262 and 263 with strict internal/experimental API checks, validates the ZIP
 with `build-logic/tools/verify-release-zip.py`, creates tag `v<base>` at that commit if
 absent, and creates release `v<base>` with the validated ZIP unchanged. It refuses an
 existing release or a tag on another commit. It uses only `GITHUB_TOKEN` and never
-publishes to JetBrains Marketplace or Maven. Tests and the Plugin Verifier stay in the
-plugin's own CI and local release checks.
+publishes to JetBrains Marketplace or Maven. Internal and experimental API findings block release;
+Compatible alone is not approval. Complete reports are retained even on failure. Any exception needs
+explicit owner approval of the exact usages, not an assumed transfer of a previous Marketplace waiver.
 
 A plugin calls it from `.github/workflows/release.yml`, pinned to a commit of this
 repository:
@@ -111,7 +114,7 @@ name: Release
 
 on:
   push:
-    branches: [ 'release-*' ]
+    branches: [ 'release/**' ]
 
 jobs:
   release:
@@ -124,9 +127,12 @@ jobs:
 ```
 
 `java-version` defaults to `21`. A plugin that already has a release job in `ci.yml`
-deletes that job so each `release-*` push creates one release. Workflow-only changes
+deletes that job so each `release/<version>` push creates one release. Workflow-only changes
 here need no re-sync; the vendored `build-logic/` must already contain
 `tools/verify-release-zip.py`.
+
+Local API audits can select targets with `-PverificationIdes='IU-262.10968.63 IU-263.5701.42'` and
+use `-PstrictApiVerification=true`. Without a target override, the complete configured IDE list is used.
 
 **IntelliJ ordering:** its comparator treats `-dev` as newer than the same bare
 base, not as a SemVer prerelease. Thus `0.3.5 < 0.4.0-dev.… < 0.4.1`, but a bare
