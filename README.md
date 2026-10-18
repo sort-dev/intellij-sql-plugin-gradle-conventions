@@ -118,6 +118,7 @@ repository:
 name: Release
 
 on:
+  workflow_dispatch:
   push:
     branches: [ 'release/**' ]
 
@@ -135,6 +136,11 @@ jobs:
 deletes that job so each `release/<version>` push creates one release. Workflow-only changes
 here need no re-sync; the vendored `build-logic/` must already contain
 `tools/verify-release-zip.py`.
+
+If a prepared main commit contains `[skip ci]`, creating its release branch does not trigger the push
+workflow. Dispatch the caller on that exact branch instead:
+`gh workflow run release.yml --ref release/<version>`. The same main-ancestry, version and API checks
+apply. Dispatching on main itself is rejected. This requires no commit or ZIP changes after dogfood.
 
 Local API audits can select targets with `-PverificationIdes='IU-262.10968.63 IU-263.5701.42'` and
 use `-PstrictApiVerification=true`. Without a target override, the complete configured IDE list is used.
