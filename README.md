@@ -48,7 +48,7 @@ dependencies {
 
 `dev.brikk.house` snapshot versions resolve only from Maven Local, even when a build declares a snapshot repository; released versions come from Maven Central.
 
-The plugin applies Kotlin JVM and the IntelliJ Platform Gradle plugin, compiles for Java 21 against the catalog's 261 SDK (`-P<dialect>.localIde=<path>` uses a local IDE instead), sets since/until builds, adds the database, JSON, Java and Kotlin bundled plugins, configures the Plugin Verifier with a project-local cache, and packages the legal files into `META-INF`. A plugin keeps its dependency versions by pinning them in settings with `version("<alias>", "<version>")` inside `create("libs")`, and overrides anything else with the usual DSL.
+The plugin applies Kotlin JVM and the IntelliJ Platform Gradle plugin, compiles for Java 25 against the catalog's 262 SDK (IDE lines 2026.2 and 2026.3 require Java 25; 2026.1 is no longer supported) (`-P<dialect>.localIde=<path>` uses a local IDE instead), sets since/until builds, adds the database, JSON, Java and Kotlin bundled plugins, configures the Plugin Verifier with a project-local cache, and packages the legal files into `META-INF`. A plugin keeps its dependency versions by pinning them in settings with `version("<alias>", "<version>")` inside `create("libs")`, and overrides anything else with the usual DSL.
 
 ## Build versions and ZIP names
 
@@ -162,9 +162,9 @@ individual dirty edit; staging refuses them.
 | `kotlinTests` | `true` | Whether lanes load the Java and Kotlin plugins and run `**/brikk/**` tests unless `-Ptest.kotlin` says otherwise |
 | `excludePlatformKotlin` | `true` | Removes `kotlin-stdlib` and kotlinx-serialization from `dev.brikk.house` dependencies and compiles against kotlinx-serialization instead; `false` for a plugin that ships its own copies |
 | `legalFiles` | `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` | Files packaged into `META-INF`; each must exist |
-| `additionalVerifierIdes` | none | Verifier IDEs (`IU-2026.1.3`) beyond the catalog's list |
+| `additionalVerifierIdes` | none | Verifier IDEs (`IU-2026.2.5`) beyond the catalog's list |
 | `embeddedLibraries` | none | Jars expected in `lib/` beside the plugin jar: an exact file name, or a name without version |
-| `bytecodeCeilings` | none | Class file version allowed per library name, instead of 65 (Java 21) |
+| `bytecodeCeilings` | none | Class file version allowed per library name, instead of 69 (Java 25) |
 | `requiredNotices` | none | Text that `THIRD_PARTY_NOTICES.md` must contain |
 | `internalApiPackages` | none | Packages whose use is confined to `internalApiAllowedIn` |
 | `internalApiAllowedIn` | none | Packages allowed to reference `internalApiPackages` |
@@ -173,8 +173,8 @@ individual dirty edit; staging refuses them.
 
 | Task or property | Effect |
 | --- | --- |
-| `test` | Headless suite on the 261 SDK |
-| `test262`, `test263` | The same suite on each `intellij-runtime-*` build in the catalog, with Git4Idea added; `-Ptest.ide<generation>=<path>` uses a local IDE |
+| `test` | Headless suite on the 262 SDK |
+| `test262`, `test263` | The same suite on each `intellij-runtime-*` build in the catalog, with Git4Idea added (`test262` now runs the same build as `test` and is kept so plugin CI and docs keep working); `-Ptest.ide<generation>=<path>` uses a local IDE |
 | `-Ptest.kotlin=present\|absent` | Overrides `kotlinTests` |
 | `-Ptest.pluginIsolation=true` | Runs only `*Isolation*Test`, without Kotlin, loading the plugin and its libraries through real plugin classloaders; refuses `-Ptest.kotlin=present`. Discovers the newest matching versioned ZIP by modification time, preferring matching worktrees, then adjacent checkouts. Legacy unversioned ZIPs remain accepted until peers sync. Missing ZIPs fail with build instructions, never a silent Marketplace fallback. |
 | `-Ptest.sqlTranspiler=installed` | Installs the SQL Transpiler plugin from Marketplace |
