@@ -216,9 +216,10 @@ class SqlDialectPlugin : Plugin<Project> {
         fun Test.configureSuite(extraPluginIds: List<String> = emptyList()) {
             useJUnit()
             // Gradle 9.0's class-file scanner does not read Java 25 classes and then hands every class,
-            // helpers and WhenMappings included, to JUnit. Select test classes by name instead.
+            // helpers and WhenMappings included, to JUnit. Select test classes by name instead. Includes
+            // are ORed, so the isolation lane adds only its own narrower pattern below.
             isScanForTestClasses = false
-            include("**/*Test.class")
+            if (!pluginIsolation) include("**/*Test.class")
             systemProperty("java.awt.headless", "true")
             systemProperty("test.kotlin", if (kotlinTests.get()) "present" else "absent")
             systemProperty("test.pluginIsolation", pluginIsolation.toString())
