@@ -132,7 +132,7 @@ jobs:
       title: SQL Dialect for Apache Doris
 ```
 
-`java-version` defaults to `21`. A plugin that already has a release job in `ci.yml`
+`java-version` defaults to `25`. A plugin that already has a release job in `ci.yml`
 deletes that job so each `release/<version>` push creates one release. Workflow-only changes
 here need no re-sync; the vendored `build-logic/` must already contain
 `tools/verify-release-zip.py`.
